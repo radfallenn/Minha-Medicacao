@@ -2,14 +2,10 @@ package com.radfallenn.minhamedicacao;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlarmManager;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -25,25 +21,32 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        enableFullscreen();
 
-        webView = new WebView(this);
-        setContentView(webView);
+        try {
+            enableFullscreen();
+        } catch (Throwable ignored) { }
 
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
+        try {
+            webView = new WebView(this);
+            setContentView(webView);
 
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.addJavascriptInterface(new AndroidBridge(this), "Android");
-        webView.loadUrl("file:///android_asset/index.html");
+            WebSettings settings = webView.getSettings();
+            settings.setJavaScriptEnabled(true);
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(true);
+
+            webView.setWebViewClient(new WebViewClient());
+            webView.setWebChromeClient(new WebChromeClient());
+            webView.addJavascriptInterface(new AndroidBridge(getApplicationContext()), "Android");
+            webView.loadUrl("file:///android_asset/index.html");
+        } catch (Throwable e) {
+            finish();
+            return;
+        }
 
         requestNotificationPermissionIfNeeded();
-        requestExactAlarmPermissionIfNeeded();
     }
 
     private void enableFullscreen() {
@@ -69,32 +72,24 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) enableFullscreen();
+        if (hasFocus) {
+            try { enableFullscreen(); } catch (Throwable ignored) { }
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        enableFullscreen();
+        try { enableFullscreen(); } catch (Throwable ignored) { }
     }
 
     private void requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
-        }
-    }
-
-    private void requestExactAlarmPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 31) {
-            AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
-            if (!alarmManager.canScheduleExactAlarms()) {
-                try {
-                    Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                            Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                } catch (Exception ignored) { }
+        try {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1001);
             }
-        }
+        } catch (Throwable ignored) { }
     }
 
     @Override
@@ -107,17 +102,14 @@ public class MainActivity extends Activity {
         private final Context context;
 
         AndroidBridge(Context context) {
-            this.context = context.getApplicationContext();
+            this.context = context;
         }
 
         @JavascriptInterface
         public void scheduleAll(String json) {
-            Scheduler.scheduleAll(context, json);
-        }
-
-        @JavascriptInterface
-        public void requestNotificationPermission() {
-            if (!(context instanceof Activity)) return;
+            try {
+                Scheduler.scheduleAll(context, json);
+            } catch (Throwable ignored) { }
         }
     }
 }
