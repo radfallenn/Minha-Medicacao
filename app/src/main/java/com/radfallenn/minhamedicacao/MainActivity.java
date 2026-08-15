@@ -3,28 +3,31 @@ package com.radfallenn.minhamedicacao;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
+    private static final int FILE_CHOOSER_REQUEST = 2001;
     private WebView webView;
+    private ValueCallback<Uri[]> filePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        try {
-            enableFullscreen();
-        } catch (Throwable ignored) { }
+        try { enableFullscreen(); } catch (Throwable ignored) { }
 
         try {
             webView = new WebView(this);
@@ -38,7 +41,40 @@ public class MainActivity extends Activity {
             settings.setAllowContentAccess(true);
 
             webView.setWebViewClient(new WebViewClient());
-            webView.setWebChromeClient(new WebChromeClient());
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onShowFileChooser(WebView webView,
+                                                 ValueCallback<Uri[]> filePathCallback,
+                                                 FileChooserParams fileChooserParams) {
+                    if (MainActivity.this.filePathCallback != null) {
+                        MainActivity.this.filePathCallback.onReceiveValue(null);
+                    }
+                    MainActivity.this.filePathCallback = filePathCallback;
+
+                    Intent intent;
+                    try {
+                        intent = fileChooserParams.createIntent();
+                    } catch (Throwable e) {
+                        intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("application/json");
+                    }
+
+                    intent.setAction(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("application/json");
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "application/octet-stream"});
+
+                    try {
+                        startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                        return true;
+                    } catch (Throwable e) {
+                        MainActivity.this.filePathCallback.onReceiveValue(null);
+                        MainActivity.this.filePathCallback = null;
+                        return false;
+                    }
+                }
+            });
             webView.addJavascriptInterface(new AndroidBridge(getApplicationContext()), "Android");
             webView.loadUrl("file:///android_asset/index.html");
         } catch (Throwable e) {
@@ -47,6 +83,21 @@ public class MainActivity extends Activity {
         }
 
         requestNotificationPermissionIfNeeded();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
+
+        Uri[] results = null;
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            if (uri != null) results = new Uri[]{uri};
+        }
+        filePathCallback.onReceiveValue(results);
+        filePathCallback = null;
+        try { enableFullscreen(); } catch (Throwable ignored) { }
     }
 
     private void enableFullscreen() {
@@ -107,9 +158,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void scheduleAll(String json) {
-            try {
-                Scheduler.scheduleAll(context, json);
-            } catch (Throwable ignored) { }
+            try { Scheduler.scheduleAll(context, json); } catch (Throwable ignored) { }
         }
     }
 }
